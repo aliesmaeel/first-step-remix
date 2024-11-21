@@ -1,28 +1,17 @@
 import { json } from "@remix-run/node";
-import { useLoaderData, Link, useNavigate } from "@remix-run/react";
+import {useLoaderData, Link, useNavigate, useFetcher} from "@remix-run/react";
 import { authenticate } from "../shopify.server";
-import {
-  Card,
-  EmptyState,
-  Layout,
-  Page,
-  IndexTable,
-  Thumbnail,
-  Text,
-  Icon,
-  InlineStack,
-} from "@shopify/polaris";
+import {Card, Page, IndexTable, Thumbnail, Text, Icon, InlineStack, EmptyState, Layout} from "@shopify/polaris";
 
 import { getQRCodes } from "../models/QRCode.server";
-import { AlertDiamondIcon, ImageIcon } from "@shopify/polaris-icons";
+import {useEffect} from "react";
+import {AlertDiamondIcon, ImageIcon} from "@shopify/polaris-icons";
 
 export async function loader({ request }) {
   const { admin, session } = await authenticate.admin(request);
   const qrCodes = await getQRCodes(session.shop, admin.graphql);
 
-  return json({
-    qrCodes,
-  });
+  return json({ qrCodes });
 }
 
 const EmptyQRCodeState = ({ onAction }) => (
@@ -37,14 +26,6 @@ const EmptyQRCodeState = ({ onAction }) => (
     <p>Allow customers to scan codes and buy products using their phones.</p>
   </EmptyState>
 );
-
-
-function truncate(str, { length = 25 } = {}) {
-  if (!str) return "";
-  if (str.length <= length) return str;
-  return str.slice(0, length) + "…";
-}
-
 
 const QRTable = ({ qrCodes }) => (
   <IndexTable
@@ -81,7 +62,6 @@ const QRTableRow = ({ qrCode }) => (
       <Link to={`qrcodes/${qrCode.id}`}>{truncate(qrCode.title)}</Link>
     </IndexTable.Cell>
     <IndexTable.Cell>
-      {/* [START deleted] */}
       {qrCode.productDeleted ? (
         <InlineStack align="start" gap="200">
           <span style={{ width: "20px" }}>
@@ -94,7 +74,6 @@ const QRTableRow = ({ qrCode }) => (
       ) : (
         truncate(qrCode.productTitle)
       )}
-      {/* [END deleted] */}
     </IndexTable.Cell>
     <IndexTable.Cell>
       {new Date(qrCode.createdAt).toDateString()}
@@ -103,10 +82,28 @@ const QRTableRow = ({ qrCode }) => (
   </IndexTable.Row>
 );
 
+function truncate(str, { length = 25 } = {}) {
+  if (!str) return "";
+  if (str.length <= length) return str;
+  return str.slice(0, length) + "…";
+}
 
 export default function Index() {
+  const fetcher = useFetcher();
+  const isLoading = fetcher.state === "submitting";
   const { qrCodes } = useLoaderData();
   const navigate = useNavigate();
+
+  const generateProduct = () => {
+    fetcher.submit({}, { method: "POST", action: "/app/product/new" });
+  };
+  useEffect(() => {
+    if (fetcher.data?.product) {
+      alert(`Product created: ${fetcher.data.product.title}`);
+    } else if (fetcher.data?.errors) {
+      alert(`Error: ${fetcher.data.errors.map((e) => e.message).join(", ")}`);
+    }
+  }, [fetcher.data]);
 
   return (
     <Page>
@@ -114,9 +111,16 @@ export default function Index() {
         <button variant="primary" onClick={() => navigate("/app/qrcodes/new")}>
           Create QR code
         </button>
+        <button
+          // @ts-ignore
+          variant="secondary"
+          style={{ marginLeft: "10px" }}
+          onClick={generateProduct}
+          disabled={isLoading}
+        >
+          {isLoading ? "Creating..." : "Create Product"}
+        </button>
       </ui-title-bar>
-
-
       <Layout>
         <Layout.Section>
           <Card padding="0">
@@ -128,8 +132,6 @@ export default function Index() {
           </Card>
         </Layout.Section>
       </Layout>
-
     </Page>
   );
-
 }
